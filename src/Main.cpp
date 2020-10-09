@@ -1,5 +1,6 @@
 #include <Windows.h>
 #include "Log.h"
+#include "Memory.h"
 Logger Log;
 
 void MainThread(HINSTANCE hinstDLL)
