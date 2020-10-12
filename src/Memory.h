@@ -4,8 +4,6 @@
 #include <vector>
 #include <Psapi.h>
 
-using fnHook = int(__fastcall*)(uintptr_t* pThis, uintptr_t entity_address, DWORD* param_2);
-fnHook hook;
 
 MODULEINFO GetModuleInfo(const char* szModule)
 {
@@ -47,53 +45,73 @@ uintptr_t GetRealAddress(BYTE* address)
 	return reinterpret_cast<uintptr_t>(address);
 }
 
-// can return hook function instead, eg (fnHook)hook = SetUp();
-bool SetUp(uintptr_t func_address, uintptr_t hook_address, size_t byte_size)
+
+
+template <typename T>
+T HookFunction(uintptr_t function, uintptr_t trampoline_function, int bytes)
 {
-	void* page = nullptr;
-	page = VirtualAlloc(NULL, 1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-	hook = (fnHook)page;
-	if (!page) return false;
+	const unsigned char jump_instruction[] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00 };
+	// TODO: check if first byte is E9 and if it is then do this step
+	trampoline_function = GetRealAddress((BYTE*)trampoline_function); // This is to avoid vTable
 
+	// Block of memory
+	auto page = VirtualAlloc(0, 1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+	if (!page || bytes < 14) return nullptr;
+	auto page_address = page;
 
-	// copy bytes
-	memcpy(page, reinterpret_cast<void*>(func_address), byte_size);
-	page = reinterpret_cast<void*>((uintptr_t)page + byte_size);
+	// Writting function bytes
+	memcpy(page, (void*)function, bytes);
+	page = reinterpret_cast<void*>((uintptr_t)page + bytes);
 
-	// add jmp to hook
-	const char jump_instruction[] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00 };
+	// JMP to function
 	memcpy(page, jump_instruction, 6);
 	page = reinterpret_cast<void*>((uintptr_t)page + 6);
-
-	size_t func_address_after_bytes = func_address + byte_size;
-	memcpy(page, &func_address_after_bytes, 8);
+	size_t func_address = function + bytes;
+	memcpy(page, &func_address, 8);
 	page = reinterpret_cast<void*>((uintptr_t)page + 8);
-	void* page_after = page; // label
 
-
-	// jump to our hook
+	// JMP to our trampoline
+	size_t hook_jmp_address = reinterpret_cast<size_t>(page);
 	memcpy(page, jump_instruction, 6);
 	page = reinterpret_cast<void*>((uintptr_t)page + 6);
-
-	hook_address = GetRealAddress((BYTE*)hook_address);
-	size_t hook_func = hook_address;
-	memcpy(page, &hook_func, 8);
+	size_t hook_func_address = trampoline_function;
+	memcpy(page, &hook_func_address, 8);
 	page = reinterpret_cast<void*>((uintptr_t)page + 8);
 
-
-	// patch main functions bytes
+	// Patch function bytes
 	DWORD protecc;
-	VirtualProtect((size_t*)func_address, byte_size, PAGE_EXECUTE_READWRITE, &protecc);
+	if (VirtualProtect((size_t*)function, bytes, PAGE_EXECUTE_READWRITE, &protecc))
+	{
+		memcpy((size_t*)function, jump_instruction, 6);
+		memcpy((size_t*)(function + 6), &hook_jmp_address, 8);
 
-	memcpy((size_t*)func_address, jump_instruction, 6);
-	size_t page_reutnr = reinterpret_cast<size_t>(page_after);
-	memcpy((size_t*)(func_address + 6), &page_reutnr, 8);
+		// NOP other bytes, if any
+		//memset((size_t*)function + 14, 0x90, bytes - 14)
+		const unsigned char nop[] = { 0x90 };
+		for (int i = 0; i < bytes - 14; i++)
+			*(unsigned char*)(function + 14 + i) = 0x90;
 
-	const char nop[] = { 0x90 };
-	for (size_t i = 0; i < byte_size - 14; i++)
-		memcpy((size_t*)(func_address + 14 + i), nop, 1);
+		VirtualProtect((size_t*)function, bytes, protecc, &protecc);
+	}
+	else
+	{
+		return nullptr;
+	}
 
-	VirtualProtect((size_t*)func_address, byte_size, protecc, &protecc);
+	return (T)page_address;
+}
 
-	return true;
+template <typename T>
+T UnHookFunction(uintptr_t function, T& trampoline, int bytes)
+{
+	DWORD protecc;
+	if (VirtualProtect((size_t*)function, bytes, PAGE_EXECUTE_READWRITE, &protecc))
+	{
+		memcpy((size_t*)(function), trampoline, bytes);
+		VirtualProtect((size_t*)function, bytes, protecc, &protecc);
+		VirtualFree((void*)trampoline, 0, MEM_RELEASE);
+		return nullptr;
+	}
+
+	return trampoline;
 }
