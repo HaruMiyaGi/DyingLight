@@ -9,6 +9,7 @@ public:
 	{
 		AllocConsole();
 		freopen_s(&pFile, "CONOUT$", "w", stdout);
+		freopen_s(&pFile, "CONIN$", "r", stdin);
 	}
 	~Logger()
 	{
