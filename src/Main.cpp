@@ -14,9 +14,8 @@
 Logger Log;
 D3D11 draw;
 
-
-DWORD64 g_matrix_offset = 0xC25B8780;
-
+uintptr_t GAMEDLL;
+DWORD64 g_matrix_offset = 0xC463AE70;
 
 std::vector<uintptr_t> entity_array;
 std::vector<uintptr_t> banned_entity_array;
@@ -114,7 +113,7 @@ void UpdateProcedure()
 
 	while (!GetAsyncKeyState(VK_F12) & 1)
 	{
-		Sleep(25000);
+		Sleep(10000);
 		LoopThrough();
 	}
 }
@@ -134,124 +133,31 @@ void EnemyMove(uintptr_t* pThis, uintptr_t entity_address, DWORD* param_2)
 	EnemyMoveHook(pThis, entity_address, param_2);
 }
 
-bool toggle1 = true, toggle2 = true, toggle3 = true, toggle4 = true;
-
-
-bool w2s_ac(const Vec3 pos, Vec2& screen, const Matrix4x4 ViewMatrix, int windowWidth, int windowHeight)
+bool w2s(Vec3 pos, Vec2& screen, float view_matrix[16], int WIDTH, int HEIGHT)
 {
-	Vec4 clipCoords;
-	//clipCoords.x = pos.x * ViewMatrix.f[0] + pos.y * ViewMatrix.f[4] + pos.z * ViewMatrix.f[8] + ViewMatrix.f[12];
-	clipCoords.x = pos.x * ViewMatrix.f[4] + pos.y * ViewMatrix.f[0] + pos.z * ViewMatrix.f[8] + ViewMatrix.f[12];
-	///clipCoords.x = pos.x * ViewMatrix.f[4] + pos.y * ViewMatrix.f[8] + pos.z * ViewMatrix.f[0] + ViewMatrix.f[12];
-	clipCoords.y = pos.x * ViewMatrix.f[1] + pos.y * ViewMatrix.f[5] + pos.z * ViewMatrix.f[9] + ViewMatrix.f[13];///
-	clipCoords.z = pos.x * ViewMatrix.f[2] + pos.y * ViewMatrix.f[6] + pos.z * ViewMatrix.f[10] + ViewMatrix.f[14];
-	//clipCoords.w = pos.x * ViewMatrix.f[3] + pos.y * ViewMatrix.f[7] + pos.z * ViewMatrix.f[11] + ViewMatrix.f[15];
-	clipCoords.w = pos.x * ViewMatrix.f[3] + pos.y * ViewMatrix.f[7] + pos.z * ViewMatrix.f[11] + -ViewMatrix.f[15];
+	Vec4 clip;
 
-	if (clipCoords.w < 0.1f)
+	clip.x = pos.x * view_matrix[0] + pos.y * view_matrix[1] + pos.z * view_matrix[2] + view_matrix[3];
+	clip.y = pos.x * view_matrix[4] + pos.y * view_matrix[5] + pos.z * view_matrix[6] + view_matrix[7];
+	clip.z = pos.x * view_matrix[8] + pos.y * view_matrix[9] + pos.z * view_matrix[10] + view_matrix[11];
+	clip.w = pos.x * view_matrix[12] + pos.y * view_matrix[13] + pos.z * view_matrix[14] + view_matrix[15];
+
+	if (clip.w < 0.1f)
 		return false;
 
 	Vec3 NDC;
-	NDC.x = clipCoords.x / clipCoords.w;
-	NDC.y = clipCoords.y / clipCoords.w;
-	NDC.z = clipCoords.z / clipCoords.w;
-	screen.x = (windowWidth / 2 * NDC.x) + (NDC.x + windowWidth / 2);
-	screen.y = -(windowHeight / 2 * NDC.y) + (NDC.y + windowHeight / 2);
+	NDC.x = clip.x / clip.w;
+	NDC.y = clip.y / clip.w;
+	NDC.z = clip.z / clip.w;
+
+	screen.x = NDC.x;
+	screen.y = NDC.y;
+
+	screen.x = (WIDTH / 2 * NDC.x) + (NDC.x + WIDTH / 2);
+	screen.y = -(HEIGHT / 2 * NDC.y) + (NDC.y + HEIGHT / 2);
+
 	return true;
 }
-
-Matrix4x4 tt(Matrix4x4 lol)
-{
-	Matrix4x4 nice;
-
-	nice.f[0] = lol.f[2]; ///
-	nice.f[1] = lol.f[6]; ///
-	nice.f[2] = lol.f[10]; ///
-	nice.f[3] = lol.f[14]; ///
-
-	nice.f[4] = -lol.f[0]; ///
-	nice.f[5] = -lol.f[4]; ///
-	nice.f[6] = -lol.f[8]; /// -
-	nice.f[7] = -lol.f[12]; /// -
-
-	nice.f[8] = lol.f[1]; ///
-	nice.f[9] = lol.f[5]; ///
-	nice.f[10] = lol.f[9]; ///
-	nice.f[11] = lol.f[13]; ///
-
-	nice.f[12] = -lol.f[3]; ///
-	nice.f[13] = lol.f[7]; ///
-	nice.f[14] = lol.f[11]; ///
-	nice.f[15] = lol.f[15]; ///
-
-	return nice;
-}
-
-
-bool w2s_dl(const Vec3 pos, Vec2& screen, const Matrix4x4 ViewMatrix, int windowWidth, int windowHeight)
-{
-	Vec4 clipCoords;
-
-	clipCoords.x = pos.x * ViewMatrix.f[2] + pos.y * -ViewMatrix.f[0] + pos.z * ViewMatrix.f[1] + ViewMatrix.f[3];
-	clipCoords.y = pos.x * ViewMatrix.f[6] + pos.y * ViewMatrix.f[4] + pos.z * ViewMatrix.f[5] + ViewMatrix.f[7];
-	clipCoords.z = pos.x * ViewMatrix.f[8] + pos.y * ViewMatrix.f[10] + pos.z * ViewMatrix.f[9] + ViewMatrix.f[11];
-	clipCoords.w = pos.x * ViewMatrix.f[14] + pos.y * -ViewMatrix.f[12] + pos.z * ViewMatrix.f[13] + -ViewMatrix.f[15];
-
-	if (clipCoords.w < 0.1f)
-	{
-		std::cout << "[!!!]\n";
-		return false;
-	}
-
-	Vec3 NDC;
-	NDC.x = clipCoords.x / clipCoords.w;
-	NDC.y = clipCoords.y / clipCoords.w;
-	NDC.z = clipCoords.z / clipCoords.w;
-
-	screen.x = (windowWidth / 2 * NDC.x) + (NDC.x + windowWidth / 2);
-	screen.y = -(windowHeight / 2 * NDC.y) + (NDC.y + windowHeight / 2);
-	return true;
-}
-
-
-bool w2s(const Vec3 pos, Vec2& screen, const Matrix4x4 ViewMatrix, int windowWidth, int windowHeight)
-{
-	Vec4 clipCoords;
-
-	if (toggle1)
-		clipCoords.x = pos.x * ViewMatrix.f[6] + pos.y * ViewMatrix.f[4] + pos.z * ViewMatrix.f[5] + ViewMatrix.f[7];
-	else
-		clipCoords.x = pos.x * ViewMatrix.f[4] + pos.y * ViewMatrix.f[6] + pos.z * ViewMatrix.f[5] + ViewMatrix.f[7];
-
-	if (toggle2)
-		clipCoords.y = pos.x * ViewMatrix.f[1] + pos.y * ViewMatrix.f[2] + pos.z * ViewMatrix.f[0] + ViewMatrix.f[3];
-	else
-		clipCoords.y = pos.x * ViewMatrix.f[0] + pos.y * ViewMatrix.f[2] + pos.z * ViewMatrix.f[1] + ViewMatrix.f[3];
-
-	if (toggle3)
-		clipCoords.z = pos.x * ViewMatrix.f[8] + pos.y * ViewMatrix.f[9] + pos.z * ViewMatrix.f[10] + ViewMatrix.f[11];
-	else
-		clipCoords.z = pos.x * ViewMatrix.f[8] + pos.y * ViewMatrix.f[10] + pos.z * ViewMatrix.f[9] + ViewMatrix.f[11];
-
-	if (toggle4)
-		clipCoords.w = pos.x * ViewMatrix.f[12] + pos.y * ViewMatrix.f[13] + pos.z * ViewMatrix.f[14] + ViewMatrix.f[15];
-	else
-		clipCoords.w = pos.x * ViewMatrix.f[12] + pos.y * ViewMatrix.f[14] + pos.z * ViewMatrix.f[13] + ViewMatrix.f[15];
-
-	if (clipCoords.w < 0.1f)
-		return false;
-
-	Vec3 NDC;
-	NDC.x = clipCoords.x / clipCoords.w;
-	NDC.y = clipCoords.y / clipCoords.w;
-	NDC.z = clipCoords.z / clipCoords.w;
-
-	screen.x = (windowWidth / 2 * NDC.x) + (NDC.x + windowWidth / 2);
-	screen.y = -(windowHeight / 2 * NDC.y) + (NDC.y + windowHeight / 2);
-	return true;
-}
-
-
 
 using fnD3DPresent = HRESULT(__stdcall*)(IDXGISwapChain* pThis, UINT SyncInterval, UINT Flags);
 fnD3DPresent PresentHook;
@@ -266,47 +172,36 @@ HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Fl
 	//draw.Line(Vec2(fWidth, 0), Vec2(p.x, p.y));
 	//draw.Line(Vec2(0, fHeight), Vec2(p.x, p.y));
 	//draw.Line(Vec2(fWidth, fHeight), Vec2(p.x, p.y));
+	float x, y, z;
+	if (GAMEDLL)
+	{
+		x = *(float*)(GAMEDLL + 0x1C3D460 - 8);
+		z = *(float*)(GAMEDLL + 0x1C3D460 - 4);
+		y = *(float*)(GAMEDLL + 0x1C3D460 - 0);
 
+		uintptr_t matrix_address = (uintptr_t)g_matrix_offset;// + i * 4;
+		float view_matrix[16];
+		view_matrix[0] = *(float*)(matrix_address + 0);
+		view_matrix[1] = *(float*)(matrix_address + 4);
+		view_matrix[2] = *(float*)(matrix_address + 8);
+		view_matrix[3] = *(float*)(matrix_address + 12);
+		view_matrix[4] = *(float*)(matrix_address + 16);
+		view_matrix[5] = *(float*)(matrix_address + 20);
+		view_matrix[6] = *(float*)(matrix_address + 24);
+		view_matrix[7] = *(float*)(matrix_address + 28);
+		view_matrix[8] = *(float*)(matrix_address + 32);
+		view_matrix[9] = *(float*)(matrix_address + 36);
+		view_matrix[10] = *(float*)(matrix_address + 40);
+		view_matrix[11] = *(float*)(matrix_address + 44);
+		view_matrix[12] = *(float*)(matrix_address + 48);
+		view_matrix[13] = *(float*)(matrix_address + 52);
+		view_matrix[14] = *(float*)(matrix_address + 56);
+		view_matrix[15] = *(float*)(matrix_address + 60);
+		Vec2 screen;
+		if (w2s(Vec3(x, z, y), screen, view_matrix, fWidth, fHeight))
+			draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
+	}
 
-
-	uintptr_t matrix_address = (uintptr_t)g_matrix_offset;// + i * 4;
-
-	//float matrix[16];
-	Matrix4x4 view_matrix;
-	view_matrix.f[0] = *(float*)(matrix_address + 0);
-	view_matrix.f[1] = *(float*)(matrix_address + 4);
-	view_matrix.f[2] = *(float*)(matrix_address + 8);
-	view_matrix.f[3] = *(float*)(matrix_address + 12);
-
-	view_matrix.f[4] = *(float*)(matrix_address + 16);
-	view_matrix.f[5] = *(float*)(matrix_address + 20);
-	view_matrix.f[6] = *(float*)(matrix_address + 24);
-	view_matrix.f[7] = *(float*)(matrix_address + 28);
-
-	view_matrix.f[8] = *(float*)(matrix_address + 32);
-	view_matrix.f[9] = *(float*)(matrix_address + 36);
-	view_matrix.f[10] = *(float*)(matrix_address + 40);
-	view_matrix.f[11] = *(float*)(matrix_address + 44);
-
-	view_matrix.f[12] = *(float*)(matrix_address + 48);
-	view_matrix.f[13] = *(float*)(matrix_address + 52);
-	view_matrix.f[14] = *(float*)(matrix_address + 56);
-	view_matrix.f[15] = *(float*)(matrix_address + 60);
-
-	Matrix4x4 wow = tt(view_matrix);
-	//
-	
-	Vec2 screen;
-
-	if (w2s_ac(Vec3(715.0f, -62.0f, 132.0f), screen, wow, fWidth, fHeight))
-		draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
-	if (w2s_ac(Vec3(-62.0f, 715.0f, 132.0f), screen, wow, fWidth, fHeight))
-		draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
-
-	if (w2s_ac(Vec3(710.0f, -48.0f, 127.0f), screen, wow, fWidth, fHeight))
-		draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
-	if (w2s_ac(Vec3(-48.0f, 710.0f, 127.0f), screen, wow, fWidth, fHeight))
-		draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
 
 
 
@@ -318,6 +213,7 @@ HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Fl
 		if (ImGui::Begin("[F1]", 0, ImGuiWindowFlags_NoResize))
 		{
 			ImGui::Text("uwu");
+			ImGui::Text("x: %.1f, y: %.1f, z: %.1f", x, y, z);
 		}
 		ImGui::End();
 		ImGui::Render();
@@ -334,13 +230,13 @@ void MainThread(HINSTANCE hinstDLL)
 {
 	std::cout << "uwu\n";
 
+	MODULEINFO mInfo = GetModuleInfo("gamedll_x64_rwdi.dll");
+	GAMEDLL = (uintptr_t)mInfo.lpBaseOfDll;
+
 	PresentHook = HookFunction<fnD3DPresent>(draw.GetPresentFunction(), (uintptr_t)Present, 14);
 
-
-
-	// Enemy Move function hook
-	/*
-	uintptr_t enemy_move_function = FindPattern("engine_x64_rwdi.dll",
+	// Enemy Move function hook	
+	/*uintptr_t enemy_move_function = FindPattern("engine_x64_rwdi.dll",
 		"\x48\x89\x5C\x24\x00\x57\x48\x83\xEC\x20\x48\x8B\xFA\x48\x8B\xD9\xE8\x00\x00\x00\x00\x44\x8B\x5B\x28\x48\x8B\x43\x20\x48\x8B\x5C\x24\x00\x4C\x8B\x40\x40\x41\x81\xE3\x00\x00\x00\x00\x4B\x8D\x0C\x5B\x48\xC1\xE1\x04",
 		"xxxx?xxxxxxxxxxxx????xxxxxxxxxxxx?xxxxxxx????xxxxxxxx");
 
@@ -356,93 +252,13 @@ void MainThread(HINSTANCE hinstDLL)
 	else
 	{
 		std::cout << "[HOOK] Failed to find EnemyMove function.\n";
-	}
-	*/
+	}*/
+
+
+
 
 	while (!GetAsyncKeyState(VK_F12) & 1)
 	{
-
-		int option = 0;
-		std::cout << "[1] toggle1, [2] toggle2, [3] toggle3, [4] toggle4, [5] matrix offset\n";
-		std::cout << "Option: ";
-		std::cin >> option;
-
-
-		switch (option)
-		{
-		case 1:
-		{
-			if (toggle1)
-				toggle1 = false;
-			else
-				toggle1 = true;
-			std::cout << "Toggle " << option << " is : " << toggle1 << "\n";
-		} break;
-		case 2:
-		{
-			if (toggle2)
-				toggle2 = false;
-			else
-				toggle2 = true;
-			std::cout << "Toggle " << option << " is : " << toggle2 << "\n";
-		} break;
-		case 3:
-		{
-			if (toggle3)
-				toggle3 = false;
-			else
-				toggle3 = true;
-			std::cout << "Toggle " << option << " is : " << toggle3 << "\n";
-		} break;
-		case 4:
-		{
-			if (toggle4)
-				toggle4 = false;
-			else
-				toggle4 = true;
-			std::cout << "Toggle " << option << " is : " << toggle4 << "\n";
-		} break;
-		case 5:
-		{
-			std::cout << "Matrix offset = 0x" << std::hex << g_matrix_offset << std::dec << std::endl;
-			std::cout << "New offset: ";
-			std::cin >> g_matrix_offset;
-		} break;
-		case 0:
-		{
-			system("cls");
-		} break;
-		default: break;
-		}
-
-		//view_matrix[0][0] = *(float*)(adrez + 0);
-		//view_matrix[0][1] = *(float*)(adrez + 4);
-		//view_matrix[0][2] = *(float*)(adrez + 8);
-		//view_matrix[0][3] = *(float*)(adrez + 12);
-
-		//view_matrix[1][0] = *(float*)(adrez + 16);
-		//view_matrix[1][1] = *(float*)(adrez + 20);
-		//view_matrix[1][2] = *(float*)(adrez + 24);
-		//view_matrix[1][3] = *(float*)(adrez + 28);
-
-		//view_matrix[2][0] = *(float*)(adrez + 32);
-		//view_matrix[2][1] = *(float*)(adrez + 36);
-		//view_matrix[2][2] = *(float*)(adrez + 40);
-		//view_matrix[2][3] = *(float*)(adrez + 44);
-
-		//view_matrix[3][0] = *(float*)(adrez + 48);
-		//view_matrix[3][1] = *(float*)(adrez + 52);
-		//view_matrix[3][2] = *(float*)(adrez + 56);
-		//view_matrix[3][3] = *(float*)(adrez + 60);
-
-		//system("cls");
-		//std::cout << "[ " << view_matrix[0][0] << " ]" << "[ " << view_matrix[0][1] << " ]" << "[ " << view_matrix[0][2] << " ]" << "[ " << view_matrix[0][3] << " ]\n";
-		//std::cout << "[ " << view_matrix[1][0] << " ]" << "[ " << view_matrix[1][1] << " ]" << "[ " << view_matrix[1][2] << " ]" << "[ " << view_matrix[1][3] << " ]\n";
-		//std::cout << "[ " << view_matrix[2][0] << " ]" << "[ " << view_matrix[2][1] << " ]" << "[ " << view_matrix[2][2] << " ]" << "[ " << view_matrix[2][3] << " ]\n";
-		//std::cout << "[ " << view_matrix[3][0] << " ]" << "[ " << view_matrix[3][1] << " ]" << "[ " << view_matrix[3][2] << " ]" << "[ " << view_matrix[3][3] << " ]\n";
-		//std::cout << "\n=====================================\n\n";
-		//Sleep(100);
-
 		if (GetAsyncKeyState(VK_F1))
 			showImGui = true;
 
