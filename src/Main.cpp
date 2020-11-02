@@ -15,7 +15,10 @@ Logger Log;
 D3D11 draw;
 
 uintptr_t GAMEDLL;
-DWORD64 g_matrix_offset = 0xC5AC87B0;
+DWORD64 g_matrix_offset = 0xC78560E0;
+
+float max_dist = 10.0f;
+uintptr_t location = 0;
 
 std::vector<uintptr_t> entity_array;
 std::vector<uintptr_t> banned_entity_array;
@@ -189,6 +192,12 @@ void AddZombie(uintptr_t* pThis)
 	//zombie_array.push_back(zombie);
 }
 
+
+
+std::vector<uintptr_t*> ent_ptrs;
+
+
+
 using fnD3DPresent = HRESULT(__stdcall*)(IDXGISwapChain* pThis, UINT SyncInterval, UINT Flags);
 fnD3DPresent PresentHook;
 HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags)
@@ -215,16 +224,28 @@ HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Fl
 	view_matrix[15] = *(float*)(matrix_address + 60);
 	Vec2 screen;
 
-	auto zombies = zombie_ptr_array;
-	for (auto& zombie : zombies)
+
+	auto entities = ent_ptrs;
+	for (auto& entity : entities)
 	{
-		float* x = (float*)((size_t)zombie + 0x138);
-		float* z = (float*)((size_t)zombie + 0x13C);
-		float* y = (float*)((size_t)zombie + 0x140);
+		float* x = (float*)((size_t)entity + 0x138);
+		float* z = (float*)((size_t)entity + 0x13C);
+		float* y = (float*)((size_t)entity + 0x140);
 
 		if (w2s(Vec3(*x, *z, *y), screen, view_matrix, fWidth, fHeight))
 			draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
 	}
+
+	//auto zombies = zombie_ptr_array;
+	//for (auto& zombie : zombies)
+	//{
+	//	float* x = (float*)((size_t)zombie + 0x138);
+	//	float* z = (float*)((size_t)zombie + 0x13C);
+	//	float* y = (float*)((size_t)zombie + 0x140);
+
+	//	if (w2s(Vec3(*x, *z, *y), screen, view_matrix, fWidth, fHeight))
+	//		draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
+	//}
 
 
 	/*if (GAMEDLL)
@@ -236,6 +257,21 @@ HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Fl
 		if (w2s(Vec3(x, z, y), screen, view_matrix, fWidth, fHeight))
 			draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
 	}*/
+
+	if (showImGui)
+	{
+		ImGui_ImplDX11_NewFrame();
+		ImGui_ImplWin32_NewFrame();
+		ImGui::NewFrame();
+		if (ImGui::Begin("[F1]", 0, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Max Distance");
+			ImGui::SliderFloat("X", &max_dist, 1.0f, 100.0f, "%.1f");
+		}
+		ImGui::End();
+		ImGui::Render();
+		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+	}
 
 	/*if (showImGui)
 	{
@@ -256,20 +292,60 @@ HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Fl
 }
 
 
+
+float GetDistance(const Vec3& point1, const Vec3& point2)
+{
+	float distance = sqrt((point1.x - point2.x) * (point1.x - point2.x) +
+		(point1.y - point2.y) * (point1.y - point2.y) +
+		(point1.z - point2.z) * (point1.z - point2.z));
+	return distance;
+}
+
+
+
+
 using fnMoveFunc3 = int(__fastcall*)(uintptr_t* pThis);
 fnMoveFunc3 MoveFuncHook3;
 int MyMoveFunc3(uintptr_t* pThis)
 {
-	AddZombie(pThis);
+	float* x = (float*)((size_t)pThis + 0x138);
+	float* z = (float*)((size_t)pThis + 0x13C);
+	float* y = (float*)((size_t)pThis + 0x140);
+	Vec3 entity(*x, *y, *z);
+	
+	auto loc = 0xC2404890;
 
-	/*
-	if (check_dist(100m)
-		if (!in_array)
-			ent_ptr_arr.push(ent)
+	float* my_x = (float*)((size_t)loc + 0xBC);
+	float* my_z = (float*)((size_t)loc + 0xC0);
+	float* my_y = (float*)((size_t)loc + 0xC4);
+	Vec3 me(*my_x, *my_y, *my_z);
+
+	float dist = GetDistance(me, entity);
+
+	if (dist <= max_dist)
+	{
+		if (std::find(ent_ptrs.begin(), ent_ptrs.end(), pThis) == ent_ptrs.end())
+			ent_ptrs.push_back(pThis);
+	}
 	else
-		if (in_array)
-			ent_ptr_arr.pop(ent)
-	*/
+	{
+		std::remove(ent_ptrs.begin(), ent_ptrs.end(), pThis);
+
+		for (auto& ent : ent_ptrs)
+		{
+			float* ex = (float*)((size_t)ent + 0x138);
+			float* ez = (float*)((size_t)ent + 0x13C);
+			float* ey = (float*)((size_t)ent + 0x140);
+			Vec3 ent_pos(*ex, *ez, *ey);
+			float ent_dist = GetDistance(me, ent_pos);
+			if (ent_dist <= max_dist)
+				std::remove(ent_ptrs.begin(), ent_ptrs.end(), ent);
+		}
+	}
+
+
+
+	//AddZombie(pThis);
 
 	return MoveFuncHook3(pThis);
 }
@@ -309,8 +385,6 @@ void MainThread(HINSTANCE hinstDLL)
 	}
 
 
-	while (!GetAsyncKeyState(VK_F12) & 1);
-
 	// Enemy Move function hook	
 	/*uintptr_t enemy_move_function = FindPattern("engine_x64_rwdi.dll",
 		"\x48\x89\x5C\x24\x00\x57\x48\x83\xEC\x20\x48\x8B\xFA\x48\x8B\xD9\xE8\x00\x00\x00\x00\x44\x8B\x5B\x28\x48\x8B\x43\x20\x48\x8B\x5C\x24\x00\x4C\x8B\x40\x40\x41\x81\xE3\x00\x00\x00\x00\x4B\x8D\x0C\x5B\x48\xC1\xE1\x04",
@@ -333,14 +407,14 @@ void MainThread(HINSTANCE hinstDLL)
 
 
 
-	//while (!GetAsyncKeyState(VK_F12) & 1)
-	//{
-	//	if (GetAsyncKeyState(VK_F1))
-	//		showImGui = true;
+	while (!GetAsyncKeyState(VK_F12) & 1)
+	{
+		if (GetAsyncKeyState(VK_F1))
+			showImGui = true;
 
-	//	if (GetAsyncKeyState(VK_F2))
-	//		showImGui = false;
-	//}
+		if (GetAsyncKeyState(VK_F2))
+			showImGui = false;
+	}
 
 	PresentHook = UnHookFunction<fnD3DPresent>(draw.GetPresentFunction(), PresentHook, 14);
 	MoveFuncHook3 = UnHookFunction<fnMoveFunc3>(move_func_3, MoveFuncHook3, 20);
