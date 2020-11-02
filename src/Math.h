@@ -12,11 +12,6 @@ float view_y(float y, float height)
 }
 
 
-struct Matrix4x4
-{
-	float f[4 * 4];
-};
-
 struct Vec2
 {
 	float x, y;

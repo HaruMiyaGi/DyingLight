@@ -15,7 +15,7 @@ Logger Log;
 D3D11 draw;
 
 uintptr_t GAMEDLL;
-DWORD64 g_matrix_offset = 0xC463AE70;
+DWORD64 g_matrix_offset = 0xC5AC87B0;
 
 std::vector<uintptr_t> entity_array;
 std::vector<uintptr_t> banned_entity_array;
@@ -159,53 +159,85 @@ bool w2s(Vec3 pos, Vec2& screen, float view_matrix[16], int WIDTH, int HEIGHT)
 	return true;
 }
 
+
+struct Zombie
+{
+	float x, y, z;
+
+	Zombie()
+		: x(0), y(0), z(0)
+	{}
+
+	Zombie(float x, float y, float z)
+		: x(x), y(y), z(z)
+	{}
+};
+
+std::vector<Zombie> zombie_array;
+std::vector<uintptr_t*> zombie_ptr_array;
+
+void AddZombie(uintptr_t* pThis)
+{
+	auto res = std::find(std::begin(zombie_ptr_array), std::end(zombie_ptr_array), pThis);
+	if (res == std::end(zombie_ptr_array))
+		zombie_ptr_array.push_back(pThis);
+
+	//float* x = (float*)((size_t)pThis + 0x138); // 0x138
+	//float* z = (float*)((size_t)pThis + 0x13C); // 0x13C
+	//float* y = (float*)((size_t)pThis + 0x140); // 0x140
+	//Zombie zombie(*x, *y, *z);
+	//zombie_array.push_back(zombie);
+}
+
 using fnD3DPresent = HRESULT(__stdcall*)(IDXGISwapChain* pThis, UINT SyncInterval, UINT Flags);
 fnD3DPresent PresentHook;
 HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags)
 {
 	draw.Init(pSwapChain);
 
-	//POINT p;
-	//GetCursorPos(&p);
-	//ScreenToClient(g_HWND, &p);
-	//draw.Line(Vec2(0, 0), Vec2(p.x, p.y));
-	//draw.Line(Vec2(fWidth, 0), Vec2(p.x, p.y));
-	//draw.Line(Vec2(0, fHeight), Vec2(p.x, p.y));
-	//draw.Line(Vec2(fWidth, fHeight), Vec2(p.x, p.y));
-	float x, y, z;
-	if (GAMEDLL)
+	uintptr_t matrix_address = (uintptr_t)g_matrix_offset;// + i * 4;
+	float view_matrix[16];
+	view_matrix[0] = *(float*)(matrix_address + 0);
+	view_matrix[1] = *(float*)(matrix_address + 4);
+	view_matrix[2] = *(float*)(matrix_address + 8);
+	view_matrix[3] = *(float*)(matrix_address + 12);
+	view_matrix[4] = *(float*)(matrix_address + 16);
+	view_matrix[5] = *(float*)(matrix_address + 20);
+	view_matrix[6] = *(float*)(matrix_address + 24);
+	view_matrix[7] = *(float*)(matrix_address + 28);
+	view_matrix[8] = *(float*)(matrix_address + 32);
+	view_matrix[9] = *(float*)(matrix_address + 36);
+	view_matrix[10] = *(float*)(matrix_address + 40);
+	view_matrix[11] = *(float*)(matrix_address + 44);
+	view_matrix[12] = *(float*)(matrix_address + 48);
+	view_matrix[13] = *(float*)(matrix_address + 52);
+	view_matrix[14] = *(float*)(matrix_address + 56);
+	view_matrix[15] = *(float*)(matrix_address + 60);
+	Vec2 screen;
+
+	auto zombies = zombie_ptr_array;
+	for (auto& zombie : zombies)
+	{
+		float* x = (float*)((size_t)zombie + 0x138);
+		float* z = (float*)((size_t)zombie + 0x13C);
+		float* y = (float*)((size_t)zombie + 0x140);
+
+		if (w2s(Vec3(*x, *z, *y), screen, view_matrix, fWidth, fHeight))
+			draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
+	}
+
+
+	/*if (GAMEDLL)
 	{
 		x = *(float*)(GAMEDLL + 0x1C3D460 - 8);
 		z = *(float*)(GAMEDLL + 0x1C3D460 - 4);
 		y = *(float*)(GAMEDLL + 0x1C3D460 - 0);
 
-		uintptr_t matrix_address = (uintptr_t)g_matrix_offset;// + i * 4;
-		float view_matrix[16];
-		view_matrix[0] = *(float*)(matrix_address + 0);
-		view_matrix[1] = *(float*)(matrix_address + 4);
-		view_matrix[2] = *(float*)(matrix_address + 8);
-		view_matrix[3] = *(float*)(matrix_address + 12);
-		view_matrix[4] = *(float*)(matrix_address + 16);
-		view_matrix[5] = *(float*)(matrix_address + 20);
-		view_matrix[6] = *(float*)(matrix_address + 24);
-		view_matrix[7] = *(float*)(matrix_address + 28);
-		view_matrix[8] = *(float*)(matrix_address + 32);
-		view_matrix[9] = *(float*)(matrix_address + 36);
-		view_matrix[10] = *(float*)(matrix_address + 40);
-		view_matrix[11] = *(float*)(matrix_address + 44);
-		view_matrix[12] = *(float*)(matrix_address + 48);
-		view_matrix[13] = *(float*)(matrix_address + 52);
-		view_matrix[14] = *(float*)(matrix_address + 56);
-		view_matrix[15] = *(float*)(matrix_address + 60);
-		Vec2 screen;
 		if (w2s(Vec3(x, z, y), screen, view_matrix, fWidth, fHeight))
 			draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
-	}
+	}*/
 
-
-
-
-	if (showImGui)
+	/*if (showImGui)
 	{
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();
@@ -218,11 +250,29 @@ HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Fl
 		ImGui::End();
 		ImGui::Render();
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-	}
+	}*/
 
 	return PresentHook(pSwapChain, SyncInterval, Flags);
 }
 
+
+using fnMoveFunc3 = int(__fastcall*)(uintptr_t* pThis);
+fnMoveFunc3 MoveFuncHook3;
+int MyMoveFunc3(uintptr_t* pThis)
+{
+	AddZombie(pThis);
+
+	/*
+	if (check_dist(100m)
+		if (!in_array)
+			ent_ptr_arr.push(ent)
+	else
+		if (in_array)
+			ent_ptr_arr.pop(ent)
+	*/
+
+	return MoveFuncHook3(pThis);
+}
 
 
 
@@ -233,7 +283,33 @@ void MainThread(HINSTANCE hinstDLL)
 	MODULEINFO mInfo = GetModuleInfo("gamedll_x64_rwdi.dll");
 	GAMEDLL = (uintptr_t)mInfo.lpBaseOfDll;
 
+
+
 	PresentHook = HookFunction<fnD3DPresent>(draw.GetPresentFunction(), (uintptr_t)Present, 14);
+	/// we need minimum 12 opcodes
+
+
+	/*uintptr_t move_func_1 = FindPattern("gamedll_x64_rwdi.dll", "\x40\x55\x41\x54\x48\x8D\x6C\x24\x00\x48\x81\xEC\x00\x00\x00\x00\x4C\x8B\xE1\xE8\x00\x00\x00\x00\x4D\x8B\x1C\x24\x49\x8B\xCC\x41\xFF\x93\x00\x00\x00\x00\x84\xC0\x0F\x84\x00\x00\x00\x00\x49\x8B\xCC\x44\x0F\x29\x8C\x24\x00\x00\x00\x00\x44\x0F\x29\x94\x24\x00\x00\x00\x00\xFF\x15\x00\x00\x00\x00\x45\x0F\x57\xC9\x44\x0F\x28\xD0\x45\x0F\x2E\xD1\x0F\x84\x00\x00\x00\x00", "xxxxxxxx?xxx????xxxx????xxxxxxxxxx????xxxx????xxxxxxxx????xxxxx????xx????xxxxxxxxxxxxxx????");
+	std::cout << "[DLL] move_func_1 address: 0x" << std::hex << move_func_1 << std::dec << "\n";
+	uintptr_t move_func_2 = FindPattern("gamedll_x64_rwdi.dll", "\x48\x89\x5C\x24\x00\x55\x48\x8D\x6C\x24\x00\x48\x81\xEC\x00\x00\x00\x00\x48\x8B\x01\x48\x8B\xD9\xFF\x90\x00\x00\x00\x00\x83\xB8\x00\x00\x00\x00\x00\x0F\x85\x00\x00\x00\x00\x48\x8B\x03\x48\x89\xBC\x24\x00\x00\x00\x00\x0F\x29\xB4\x24\x00\x00\x00\x00\x0F\x29\xBC\x24\x00\x00\x00\x00\x44\x0F\x29\x84\x24\x00\x00\x00\x00\x44\x0F\x29\x8C\x24\x00\x00\x00\x00\x48\x8B\xCB\x44\x0F\x29\x54\x24\x00\x44\x0F\x29\x5C\x24\x00", "xxxx?xxxxx?xxx????xxxxxxxx????xx?????xx????xxxxxxx????xxxx????xxxx????xxxxx????xxxxx????xxxxxxxx?xxxxx?");
+	std::cout << "[DLL] move_func_2 address: 0x" << std::hex << move_func_2 << std::dec << "\n";*/
+	//uintptr_t move_func_4 = FindPattern("gamedll_x64_rwdi.dll", "\x48\x8B\xC4\x48\x89\x58\x10\x48\x89\x70\x18\x48\x89\x78\x20\x55\x48\x8D\x68\xA1\x48\x81\xEC\x00\x00\x00\x00\x0F\x29\x70\xE8\x0F\x29\x78\xD8\x44\x0F\x29\x40\x00\x48\x8B\xD9\x49\x8B\xF0\x48\x8B\xFA\x44\x0F\x29\x50\x00\x44\x0F\x29\x58\x00\x44\x0F\x29\x60\x00\x44\x0F\x29\x6C\x24\x00\x44\x0F\x29\x74\x24\x00\x44\x0F\x29\x7C\x24\x00\x4C\x89\x60\x08\x44\x8B\xA1\x00\x00\x00\x00\x48\x8B\x49\x08\x48\x8B\x41\x40\xF3\x0F\x10\xB1\x00\x00\x00\x00", "xxxxxxxxxxxxxxxxxxxxxxx????xxxxxxxxxxxx?xxxxxxxxxxxxx?xxxx?xxxx?xxxxx?xxxxx?xxxxx?xxxxxxx????xxxxxxxxxxxx????");
+	//std::cout << "[DLL] move_func_4 address: 0x" << std::hex << move_func_4 << std::dec << "\n";
+
+	uintptr_t move_func_3 = FindPattern("gamedll_x64_rwdi.dll", "\x40\x53\x48\x83\xEC\x40\x8B\x81\x00\x00\x00\x00\x48\x8B\xD9\x0F\x29\x74\x24\x00\x89\x81\x00\x00\x00\x00\x8B\x81\x00\x00\x00\x00\x0F\x29\x7C\x24\x00\x0F\x28\xF9\x89\x81\x00\x00\x00\x00\x8B\x81\x00\x00\x00\x00\x89\x81\x00\x00\x00\x00\x48\x8B\x49\x50\x48\x83\xC1\x18\xFF\x15\x00\x00\x00\x00\x48\x8B\xC8\x48\x8B\x10\xFF\x92\x00\x00\x00\x00\x48\x85\xC0\x74\x21\x48\x8B\x10\x48\x8B\xC8\xFF\x92\x00\x00\x00\x00\x84\xC0\x74\x11\x48\x8B\xCB\xFF\x15\x00\x00\x00\x00\xF3\x0F\x11\x83\x00\x00\x00\x00", "xxxxxxxx????xxxxxxx?xx????xx????xxxx?xxxxx????xx????xx????xxxxxxxxxx????xxxxxxxx????xxxxxxxxxxxxx????xxxxxxxxx????xxxx????");
+	//std::cout << "[DLL] move_func_3 address: 0x" << std::hex << move_func_3 << std::dec << "\n";
+	if (move_func_3)
+	{
+		MoveFuncHook3 = HookFunction<fnMoveFunc3>(move_func_3, (uintptr_t)MyMoveFunc3, 20);
+
+		if (MoveFuncHook3 != nullptr)
+		{
+			std::cout << "[HOOK] MyMoveFunc3() address: 0x" << std::hex << move_func_3 << std::dec << "\n";
+		}
+	}
+
+
+	while (!GetAsyncKeyState(VK_F12) & 1);
 
 	// Enemy Move function hook	
 	/*uintptr_t enemy_move_function = FindPattern("engine_x64_rwdi.dll",
@@ -257,19 +333,20 @@ void MainThread(HINSTANCE hinstDLL)
 
 
 
-	while (!GetAsyncKeyState(VK_F12) & 1)
-	{
-		if (GetAsyncKeyState(VK_F1))
-			showImGui = true;
+	//while (!GetAsyncKeyState(VK_F12) & 1)
+	//{
+	//	if (GetAsyncKeyState(VK_F1))
+	//		showImGui = true;
 
-		if (GetAsyncKeyState(VK_F2))
-			showImGui = false;
+	//	if (GetAsyncKeyState(VK_F2))
+	//		showImGui = false;
+	//}
 
-	}
+	PresentHook = UnHookFunction<fnD3DPresent>(draw.GetPresentFunction(), PresentHook, 14);
+	MoveFuncHook3 = UnHookFunction<fnMoveFunc3>(move_func_3, MoveFuncHook3, 20);
 
 	FreeLibraryAndExitThread(hinstDLL, 0);
 
-	PresentHook = UnHookFunction<fnD3DPresent>(draw.GetPresentFunction(), PresentHook, 14);
 }
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
