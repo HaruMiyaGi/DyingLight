@@ -15,9 +15,13 @@ Logger Log;
 D3D11 draw;
 
 uintptr_t GAMEDLL;
-DWORD64 g_matrix_offset = 0xC78560E0;
 
-float max_dist = 10.0f;
+uintptr_t global_matrix_offset;
+uintptr_t global_player_pos_offset;
+
+
+float imgui_zombie_height = 2.0f;
+float max_dist = 40.0f;
 uintptr_t location = 0;
 
 std::vector<uintptr_t> entity_array;
@@ -136,10 +140,14 @@ void EnemyMove(uintptr_t* pThis, uintptr_t entity_address, DWORD* param_2)
 	EnemyMoveHook(pThis, entity_address, param_2);
 }
 
-bool w2s(Vec3 pos, Vec2& screen, float view_matrix[16], int WIDTH, int HEIGHT)
-{
-	Vec4 clip;
 
+
+bool w2s(Vec3 pos, Vec2& screen, int WIDTH, int HEIGHT)
+{
+	float view_matrix[16];
+	memcpy(view_matrix, (void*)global_matrix_offset, sizeof(float) * 16);
+
+	Vec4 clip;
 	clip.x = pos.x * view_matrix[0] + pos.y * view_matrix[1] + pos.z * view_matrix[2] + view_matrix[3];
 	clip.y = pos.x * view_matrix[4] + pos.y * view_matrix[5] + pos.z * view_matrix[6] + view_matrix[7];
 	clip.z = pos.x * view_matrix[8] + pos.y * view_matrix[9] + pos.z * view_matrix[10] + view_matrix[11];
@@ -160,6 +168,22 @@ bool w2s(Vec3 pos, Vec2& screen, float view_matrix[16], int WIDTH, int HEIGHT)
 	screen.y = -(HEIGHT / 2 * NDC.y) + (NDC.y + HEIGHT / 2);
 
 	return true;
+}
+
+
+
+void OnFade(int fade_type)
+{
+	if (fade_type == 1)
+	{
+		// pause scripts
+	}
+
+	if (fade_type == 3)
+	{
+		// update ptrs
+		// unpause scripts
+	}
 }
 
 
@@ -195,8 +219,13 @@ void AddZombie(uintptr_t* pThis)
 
 
 std::vector<uintptr_t*> ent_ptrs;
-
-
+float GetDistance(const Vec3& point1, const Vec3& point2)
+{
+	float distance = sqrt((point1.x - point2.x) * (point1.x - point2.x) +
+		(point1.y - point2.y) * (point1.y - point2.y) +
+		(point1.z - point2.z) * (point1.z - point2.z));
+	return distance;
+}
 
 using fnD3DPresent = HRESULT(__stdcall*)(IDXGISwapChain* pThis, UINT SyncInterval, UINT Flags);
 fnD3DPresent PresentHook;
@@ -204,49 +233,47 @@ HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Fl
 {
 	draw.Init(pSwapChain);
 
-	uintptr_t matrix_address = (uintptr_t)g_matrix_offset;// + i * 4;
-	float view_matrix[16];
-	view_matrix[0] = *(float*)(matrix_address + 0);
-	view_matrix[1] = *(float*)(matrix_address + 4);
-	view_matrix[2] = *(float*)(matrix_address + 8);
-	view_matrix[3] = *(float*)(matrix_address + 12);
-	view_matrix[4] = *(float*)(matrix_address + 16);
-	view_matrix[5] = *(float*)(matrix_address + 20);
-	view_matrix[6] = *(float*)(matrix_address + 24);
-	view_matrix[7] = *(float*)(matrix_address + 28);
-	view_matrix[8] = *(float*)(matrix_address + 32);
-	view_matrix[9] = *(float*)(matrix_address + 36);
-	view_matrix[10] = *(float*)(matrix_address + 40);
-	view_matrix[11] = *(float*)(matrix_address + 44);
-	view_matrix[12] = *(float*)(matrix_address + 48);
-	view_matrix[13] = *(float*)(matrix_address + 52);
-	view_matrix[14] = *(float*)(matrix_address + 56);
-	view_matrix[15] = *(float*)(matrix_address + 60);
+
 	Vec2 screen;
-
-
 	auto entities = ent_ptrs;
 	for (auto& entity : entities)
 	{
-		float* x = (float*)((size_t)entity + 0x138);
-		float* z = (float*)((size_t)entity + 0x13C);
-		float* y = (float*)((size_t)entity + 0x140);
+		//if (entity == nullptr)
+		//{
+		//	std::remove(ent_ptrs.begin(), ent_ptrs.end(), entity);
+		//	continue;
+		//}
 
-		if (w2s(Vec3(*x, *z, *y), screen, view_matrix, fWidth, fHeight))
-			draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
+		Vec3 ent; 
+		ent.x = *(float*)((size_t)entity + 0x138);
+		ent.z = *(float*)((size_t)entity + 0x13C);
+		ent.y = *(float*)((size_t)entity + 0x140);
+
+		Vec3 me;
+		me.x = *(float*)global_player_pos_offset;
+		me.z = *(float*)(global_player_pos_offset + 4);
+		me.y = *(float*)(global_player_pos_offset + 8);
+
+		float distance = GetDistance(me, ent);
+
+		if (distance <= max_dist)
+		{
+			if (w2s(Vec3(ent.x, ent.z, ent.y), screen, fWidth, fHeight))
+			{
+				Vec2 screen2;
+				if (w2s(Vec3(ent.x, ent.z + imgui_zombie_height, ent.y), screen2, fWidth, fHeight))
+					draw.Line(screen, screen2);
+				//draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
+			}
+		}
+		else
+		{
+			auto ent_ptrs_remove = ent_ptrs;
+			ent_ptrs_remove.erase(std::remove(ent_ptrs_remove.begin(), ent_ptrs_remove.end(), entity), ent_ptrs_remove.end());
+			ent_ptrs = ent_ptrs_remove;
+		}
+
 	}
-
-	//auto zombies = zombie_ptr_array;
-	//for (auto& zombie : zombies)
-	//{
-	//	float* x = (float*)((size_t)zombie + 0x138);
-	//	float* z = (float*)((size_t)zombie + 0x13C);
-	//	float* y = (float*)((size_t)zombie + 0x140);
-
-	//	if (w2s(Vec3(*x, *z, *y), screen, view_matrix, fWidth, fHeight))
-	//		draw.Line(Vec2(fWidth / 2.0f, fHeight), screen);
-	//}
-
 
 	/*if (GAMEDLL)
 	{
@@ -265,42 +292,19 @@ HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Fl
 		ImGui::NewFrame();
 		if (ImGui::Begin("[F1]", 0, ImGuiWindowFlags_AlwaysAutoResize))
 		{
+			ImGui::Text("Offsets: %d", ent_ptrs.size());
 			ImGui::Text("Max Distance");
-			ImGui::SliderFloat("X", &max_dist, 1.0f, 100.0f, "%.1f");
+			ImGui::SliderFloat("Max Distance", &max_dist, 1.0f, 100.0f, "%.1f");
+			ImGui::Text("Zombie Height");
+			ImGui::SliderFloat("Zombie Height", &imgui_zombie_height, 0.01f, 2.0f, "%.1f");
 		}
 		ImGui::End();
 		ImGui::Render();
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 	}
 
-	/*if (showImGui)
-	{
-		ImGui_ImplDX11_NewFrame();
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
-		if (ImGui::Begin("[F1]", 0, ImGuiWindowFlags_NoResize))
-		{
-			ImGui::Text("uwu");
-			ImGui::Text("x: %.1f, y: %.1f, z: %.1f", x, y, z);
-		}
-		ImGui::End();
-		ImGui::Render();
-		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-	}*/
-
 	return PresentHook(pSwapChain, SyncInterval, Flags);
 }
-
-
-
-float GetDistance(const Vec3& point1, const Vec3& point2)
-{
-	float distance = sqrt((point1.x - point2.x) * (point1.x - point2.x) +
-		(point1.y - point2.y) * (point1.y - point2.y) +
-		(point1.z - point2.z) * (point1.z - point2.z));
-	return distance;
-}
-
 
 
 
@@ -308,45 +312,48 @@ using fnMoveFunc3 = int(__fastcall*)(uintptr_t* pThis);
 fnMoveFunc3 MoveFuncHook3;
 int MyMoveFunc3(uintptr_t* pThis)
 {
-	float* x = (float*)((size_t)pThis + 0x138);
-	float* z = (float*)((size_t)pThis + 0x13C);
-	float* y = (float*)((size_t)pThis + 0x140);
-	Vec3 entity(*x, *y, *z);
-	
-	auto loc = 0xC2404890;
+	Vec3 entity;
+	entity.x = *(float*)((size_t)pThis + 0x138);
+	entity.z = *(float*)((size_t)pThis + 0x13C);
+	entity.y = *(float*)((size_t)pThis + 0x140);
 
-	float* my_x = (float*)((size_t)loc + 0xBC);
-	float* my_z = (float*)((size_t)loc + 0xC0);
-	float* my_y = (float*)((size_t)loc + 0xC4);
-	Vec3 me(*my_x, *my_y, *my_z);
+	Vec3 me;
+	me.x = *(float*)global_player_pos_offset;
+	me.z = *(float*)(global_player_pos_offset + 4);
+	me.y = *(float*)(global_player_pos_offset + 8);
 
 	float dist = GetDistance(me, entity);
 
 	if (dist <= max_dist)
 	{
-		if (std::find(ent_ptrs.begin(), ent_ptrs.end(), pThis) == ent_ptrs.end())
+		// draw.Line(me, entity);
+
+		/*std::vector<Vec2> draw_stack;
+		Vec2 screen;
+		if (w2s(entity, screen, fWidth, fHeight));
+		{
+			draw_stack.push_back(screen);
+		}*/
+
+		auto ent_ptrs_search = ent_ptrs;
+		if (std::find(ent_ptrs_search.begin(), ent_ptrs_search.end(), pThis) == ent_ptrs_search.end())
 			ent_ptrs.push_back(pThis);
 	}
-	else
-	{
-		std::remove(ent_ptrs.begin(), ent_ptrs.end(), pThis);
+	//else
+	//{
+	//	std::remove(ent_ptrs.begin(), ent_ptrs.end(), pThis);
 
-		for (auto& ent : ent_ptrs)
-		{
-			float* ex = (float*)((size_t)ent + 0x138);
-			float* ez = (float*)((size_t)ent + 0x13C);
-			float* ey = (float*)((size_t)ent + 0x140);
-			Vec3 ent_pos(*ex, *ez, *ey);
-			float ent_dist = GetDistance(me, ent_pos);
-			if (ent_dist <= max_dist)
-				std::remove(ent_ptrs.begin(), ent_ptrs.end(), ent);
-		}
-	}
-
-
-
-	//AddZombie(pThis);
-
+	//	//for (auto& ent : ent_ptrs)
+	//	//{
+	//	//	float* ex = (float*)((size_t)ent + 0x138);
+	//	//	float* ez = (float*)((size_t)ent + 0x13C);
+	//	//	float* ey = (float*)((size_t)ent + 0x140);
+	//	//	Vec3 ent_pos(*ex, *ez, *ey);
+	//	//	float ent_dist = GetDistance(me, ent_pos);
+	//	//	if (ent_dist <= max_dist)
+	//	//		std::remove(ent_ptrs.begin(), ent_ptrs.end(), ent);
+	//	//}
+	//}
 	return MoveFuncHook3(pThis);
 }
 
@@ -356,11 +363,15 @@ void MainThread(HINSTANCE hinstDLL)
 {
 	std::cout << "uwu\n";
 
-	MODULEINFO mInfo = GetModuleInfo("gamedll_x64_rwdi.dll");
-	GAMEDLL = (uintptr_t)mInfo.lpBaseOfDll;
+	global_matrix_offset = FindDMAAddy("engine_x64_rwdi.dll", 0xA2F238, { 0x78, 0x60 });
+	std::cout << "[DLL] Matrix Offset: 0x" << std::hex << global_matrix_offset << std::dec << "\n";
+
+	auto mInfo = GetModuleInfo("gamedll_x64_rwdi.dll");
+	global_player_pos_offset = ((uintptr_t)mInfo.lpBaseOfDll + 0x1DA3BC0);
+	std::cout << "[DLL] Player Pos Offset: 0x" << std::hex << global_player_pos_offset << std::dec << "\n";
 
 
-
+	
 	PresentHook = HookFunction<fnD3DPresent>(draw.GetPresentFunction(), (uintptr_t)Present, 14);
 	/// we need minimum 12 opcodes
 

@@ -46,6 +46,39 @@ uintptr_t GetRealAddress(BYTE* address)
 }
 
 
+uintptr_t FindDMAAddy(const char* module, uintptr_t ptr, std::vector<unsigned int> offsets)
+{
+	auto mInfo = GetModuleInfo(module);
+	uintptr_t addr = (uintptr_t)mInfo.lpBaseOfDll + ptr;
+
+	for (int i = 0; i < offsets.size(); ++i)
+	{
+		try
+		{
+			addr = *(uintptr_t*)addr;
+			addr += offsets[i];
+		}
+		catch (...) {
+			return 0;
+		}
+	}
+
+	return addr;
+}
+
+uintptr_t FindDMAAddy(uintptr_t ptr, std::vector<unsigned int> offsets)
+{
+	uintptr_t addr = ptr;
+
+	for (int i = 0; i < offsets.size(); ++i)
+	{
+		addr = *(uintptr_t*)addr;
+		addr += offsets[i];
+	}
+
+	return addr;
+}
+
 
 template <typename T>
 T HookFunction(uintptr_t function, uintptr_t trampoline_function, int bytes)
