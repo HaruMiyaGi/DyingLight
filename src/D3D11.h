@@ -52,9 +52,11 @@ LRESULT __stdcall WndProcHook(const HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
 {
 	if (showImGui)
 	{
+		while (::ShowCursor(TRUE) < 0);	 // ShowCursor
 		ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
 		return true;
 	}
+	while (::ShowCursor(FALSE) >= 0);
 
 	return CallWindowProc(WndProc, hWnd, msg, wParam, lParam);
 }

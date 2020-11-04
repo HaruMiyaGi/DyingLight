@@ -20,6 +20,35 @@ uintptr_t global_matrix_offset;
 uintptr_t global_player_pos_offset;
 
 
+bool global_cursor_show = false;
+
+
+void HideMouse()
+{
+	while (::ShowCursor(TRUE) >= 0);
+}
+
+void ShowMouse()
+{
+	while (::ShowCursor(TRUE) < 0);
+}
+
+void ConfineCursor(HWND hwnd)
+{
+	RECT rect;
+	GetClientRect(hwnd, &rect);
+	MapWindowPoints(hwnd, nullptr, reinterpret_cast<POINT*>(&rect), 2);
+	ClipCursor(&rect);
+}
+
+void FreeCursor()
+{
+	ClipCursor(nullptr);
+}
+
+
+
+
 float imgui_zombie_height = 2.0f;
 float max_dist = 40.0f;
 uintptr_t location = 0;
@@ -233,7 +262,7 @@ HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Fl
 {
 	draw.Init(pSwapChain);
 
-
+	/*
 	Vec2 screen;
 	auto entities = ent_ptrs;
 	for (auto& entity : entities)
@@ -274,6 +303,8 @@ HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Fl
 		}
 
 	}
+
+	*/
 
 	/*if (GAMEDLL)
 	{
@@ -358,17 +389,16 @@ int MyMoveFunc3(uintptr_t* pThis)
 }
 
 
-
 void MainThread(HINSTANCE hinstDLL)
 {
 	std::cout << "uwu\n";
 
-	global_matrix_offset = FindDMAAddy("engine_x64_rwdi.dll", 0xA2F238, { 0x78, 0x60 });
-	std::cout << "[DLL] Matrix Offset: 0x" << std::hex << global_matrix_offset << std::dec << "\n";
+	//global_matrix_offset = FindDMAAddy("engine_x64_rwdi.dll", 0xA2F238, { 0x78, 0x60 });
+	//std::cout << "[DLL] Matrix Offset: 0x" << std::hex << global_matrix_offset << std::dec << "\n";
 
-	auto mInfo = GetModuleInfo("gamedll_x64_rwdi.dll");
-	global_player_pos_offset = ((uintptr_t)mInfo.lpBaseOfDll + 0x1DA3BC0);
-	std::cout << "[DLL] Player Pos Offset: 0x" << std::hex << global_player_pos_offset << std::dec << "\n";
+	//auto mInfo = GetModuleInfo("gamedll_x64_rwdi.dll");
+	//global_player_pos_offset = ((uintptr_t)mInfo.lpBaseOfDll + 0x1DA3BC0);
+	//std::cout << "[DLL] Player Pos Offset: 0x" << std::hex << global_player_pos_offset << std::dec << "\n";
 
 
 	
@@ -383,17 +413,17 @@ void MainThread(HINSTANCE hinstDLL)
 	//uintptr_t move_func_4 = FindPattern("gamedll_x64_rwdi.dll", "\x48\x8B\xC4\x48\x89\x58\x10\x48\x89\x70\x18\x48\x89\x78\x20\x55\x48\x8D\x68\xA1\x48\x81\xEC\x00\x00\x00\x00\x0F\x29\x70\xE8\x0F\x29\x78\xD8\x44\x0F\x29\x40\x00\x48\x8B\xD9\x49\x8B\xF0\x48\x8B\xFA\x44\x0F\x29\x50\x00\x44\x0F\x29\x58\x00\x44\x0F\x29\x60\x00\x44\x0F\x29\x6C\x24\x00\x44\x0F\x29\x74\x24\x00\x44\x0F\x29\x7C\x24\x00\x4C\x89\x60\x08\x44\x8B\xA1\x00\x00\x00\x00\x48\x8B\x49\x08\x48\x8B\x41\x40\xF3\x0F\x10\xB1\x00\x00\x00\x00", "xxxxxxxxxxxxxxxxxxxxxxx????xxxxxxxxxxxx?xxxxxxxxxxxxx?xxxx?xxxx?xxxxx?xxxxx?xxxxx?xxxxxxx????xxxxxxxxxxxx????");
 	//std::cout << "[DLL] move_func_4 address: 0x" << std::hex << move_func_4 << std::dec << "\n";
 
-	uintptr_t move_func_3 = FindPattern("gamedll_x64_rwdi.dll", "\x40\x53\x48\x83\xEC\x40\x8B\x81\x00\x00\x00\x00\x48\x8B\xD9\x0F\x29\x74\x24\x00\x89\x81\x00\x00\x00\x00\x8B\x81\x00\x00\x00\x00\x0F\x29\x7C\x24\x00\x0F\x28\xF9\x89\x81\x00\x00\x00\x00\x8B\x81\x00\x00\x00\x00\x89\x81\x00\x00\x00\x00\x48\x8B\x49\x50\x48\x83\xC1\x18\xFF\x15\x00\x00\x00\x00\x48\x8B\xC8\x48\x8B\x10\xFF\x92\x00\x00\x00\x00\x48\x85\xC0\x74\x21\x48\x8B\x10\x48\x8B\xC8\xFF\x92\x00\x00\x00\x00\x84\xC0\x74\x11\x48\x8B\xCB\xFF\x15\x00\x00\x00\x00\xF3\x0F\x11\x83\x00\x00\x00\x00", "xxxxxxxx????xxxxxxx?xx????xx????xxxx?xxxxx????xx????xx????xxxxxxxxxx????xxxxxxxx????xxxxxxxxxxxxx????xxxxxxxxx????xxxx????");
-	//std::cout << "[DLL] move_func_3 address: 0x" << std::hex << move_func_3 << std::dec << "\n";
-	if (move_func_3)
-	{
-		MoveFuncHook3 = HookFunction<fnMoveFunc3>(move_func_3, (uintptr_t)MyMoveFunc3, 20);
+	//uintptr_t move_func_3 = FindPattern("gamedll_x64_rwdi.dll", "\x40\x53\x48\x83\xEC\x40\x8B\x81\x00\x00\x00\x00\x48\x8B\xD9\x0F\x29\x74\x24\x00\x89\x81\x00\x00\x00\x00\x8B\x81\x00\x00\x00\x00\x0F\x29\x7C\x24\x00\x0F\x28\xF9\x89\x81\x00\x00\x00\x00\x8B\x81\x00\x00\x00\x00\x89\x81\x00\x00\x00\x00\x48\x8B\x49\x50\x48\x83\xC1\x18\xFF\x15\x00\x00\x00\x00\x48\x8B\xC8\x48\x8B\x10\xFF\x92\x00\x00\x00\x00\x48\x85\xC0\x74\x21\x48\x8B\x10\x48\x8B\xC8\xFF\x92\x00\x00\x00\x00\x84\xC0\x74\x11\x48\x8B\xCB\xFF\x15\x00\x00\x00\x00\xF3\x0F\x11\x83\x00\x00\x00\x00", "xxxxxxxx????xxxxxxx?xx????xx????xxxx?xxxxx????xx????xx????xxxxxxxxxx????xxxxxxxx????xxxxxxxxxxxxx????xxxxxxxxx????xxxx????");
+	////std::cout << "[DLL] move_func_3 address: 0x" << std::hex << move_func_3 << std::dec << "\n";
+	//if (move_func_3)
+	//{
+	//	MoveFuncHook3 = HookFunction<fnMoveFunc3>(move_func_3, (uintptr_t)MyMoveFunc3, 20);
 
-		if (MoveFuncHook3 != nullptr)
-		{
-			std::cout << "[HOOK] MyMoveFunc3() address: 0x" << std::hex << move_func_3 << std::dec << "\n";
-		}
-	}
+	//	if (MoveFuncHook3 != nullptr)
+	//	{
+	//		std::cout << "[HOOK] MyMoveFunc3() address: 0x" << std::hex << move_func_3 << std::dec << "\n";
+	//	}
+	//}
 
 
 	// Enemy Move function hook	
@@ -421,14 +451,24 @@ void MainThread(HINSTANCE hinstDLL)
 	while (!GetAsyncKeyState(VK_F12) & 1)
 	{
 		if (GetAsyncKeyState(VK_F1))
-			showImGui = true;
+		{
+			if (SetForegroundWindow(GetDesktopWindow()))
+				showImGui = true;
+			else
+				showImGui = false;
+			//showImGui = true;
+			//SetForegroundWindow(GetDesktopWindow());
+		}
 
 		if (GetAsyncKeyState(VK_F2))
+		{
 			showImGui = false;
+			SetForegroundWindow(GetDesktopWindow());
+		}
 	}
 
 	PresentHook = UnHookFunction<fnD3DPresent>(draw.GetPresentFunction(), PresentHook, 14);
-	MoveFuncHook3 = UnHookFunction<fnMoveFunc3>(move_func_3, MoveFuncHook3, 20);
+	//MoveFuncHook3 = UnHookFunction<fnMoveFunc3>(move_func_3, MoveFuncHook3, 20);
 
 	FreeLibraryAndExitThread(hinstDLL, 0);
 
