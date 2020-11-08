@@ -19,6 +19,7 @@ uintptr_t GAMEDLL;
 uintptr_t global_matrix_offset;
 uintptr_t global_player_pos_offset;
 uintptr_t global_clock_address;
+uintptr_t global_weather_address;
 
 
 bool global_cursor_show = false;
@@ -327,6 +328,7 @@ HRESULT __stdcall Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Fl
 		if (ImGui::Begin("Time", 0, ImGuiWindowFlags_AlwaysAutoResize))
 		{
 			ImGui::SliderFloat("Time", &(*(float*)global_clock_address), 0.0f, 1.0f);
+			ImGui::SliderInt("Weather", &(*(int*)global_weather_address), 0, 255);
 			ImGui::End();
 		}
 
@@ -439,6 +441,7 @@ void MainThread(HINSTANCE hinstDLL)
 	std::cout << "[DLL] Player Pos Offset: 0x" << std::hex << global_player_pos_offset << std::dec << "\n";
 
 	global_clock_address = FindDMAAddy("gamedll_x64_rwdi.dll", 0x01CA4AC0, { 0xA4 });
+	global_weather_address = FindDMAAddy("gamedll_x64_rwdi.dll", 0x01CA4AC0, { 0x60, 0xF });
 
 
 	
