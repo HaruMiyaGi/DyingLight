@@ -22,6 +22,29 @@ uintptr_t global_clock_address;
 uintptr_t global_weather_address;
 
 
+
+
+
+// TODO:
+// [] clean up this file
+// [] simplify directx draws & gui
+// [] clean up hook functions
+
+// [] zombie rectangle ESP
+// [] make esp rainbow
+// [] weather changer
+// [] zombie aimbot
+// [] no death patch
+// [] good coords changer
+// [] fly hack
+// [] reset script on window load to avoid crash
+
+// [] render text
+
+
+
+
+
 bool global_cursor_show = false;
 
 
